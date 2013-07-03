@@ -32,24 +32,14 @@ class CloudfrontInvalidator
     http.verify_mode = OpenSSL::SSL::VERIFY_NONE
     body = xml_body(keys)
 
-    delay = 1
-    begin
-      resp = http.send_request 'POST', uri.path, body, headers
-      doc = REXML::Document.new resp.body
-   
-      # Create and raise an exception for any error the API returns to us.
-      if resp.code.to_i != 201
-        error_code = doc.elements["ErrorResponse/Error/Code"].text
-        self.class.const_set(error_code,Class.new(StandardError)) unless self.class.const_defined?(error_code.to_sym)
-        raise self.class.const_get(error_code).new(doc.elements["ErrorResponse/Error/Message"].text)
-      end
-    
-    # Handle the common case of too many in progress by waiting until the others finish.
-    rescue TooManyInvalidationsInProgress => e
-      sleep delay * BACKOFF_DELAY
-      delay *= 2 unless delay >= BACKOFF_LIMIT 
-      STDERR.puts e.inspect
-      retry
+    resp = http.send_request 'POST', uri.path, body, headers
+    doc = REXML::Document.new resp.body
+ 
+    # Create and raise an exception for any error the API returns to us.
+    if resp.code.to_i != 201
+      error_code = doc.elements["ErrorResponse/Error/Code"].text
+      self.class.const_set(error_code,Class.new(StandardError)) unless self.class.const_defined?(error_code.to_sym)
+      raise self.class.const_get(error_code).new(doc.elements["ErrorResponse/Error/Message"].text)
     end
 
     # If we are passed a block, poll on the status of this invalidation with truncated exponential backoff.
